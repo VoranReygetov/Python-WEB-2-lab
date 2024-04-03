@@ -5,13 +5,13 @@ from fastapi.openapi.utils import get_openapi
 import psycopg2
 from contextlib import contextmanager
 import json
-import datetime
-#connection to postgreSQL
+from datetime import datetime
 
 #enviroment for jinja2
 file_loader = FileSystemLoader('templates')
 env = Environment(loader=file_loader)
 
+#connection to postgreSQL
 @contextmanager
 def connection_pstgr():
     """
@@ -44,7 +44,10 @@ def custom_openapi():
         routes=app.routes,
     )
     openapi_schema["info"]["x-logo"] = {
-        "url": "https://static.vecteezy.com/system/resources/previews/004/852/937/large_2x/book-read-library-study-line-icon-illustration-logo-template-suitable-for-many-purposes-free-vector.jpg"
+        "url": """https://static.vecteezy.com/system/
+        resources/previews/004/852/937/large_2x/
+        book-read-library-study-line-icon-illustration-logo-template-suitable-for-many-purposes-free-vector.jpg
+        """
     }
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -151,10 +154,22 @@ def render_book_list(email: str, password: str):
     book_list_page = env.get_template(template_file)
     rents_book_id = []
     with connection_pstgr() as (conn, cursor):
-        cursor.execute("SELECT * FROM Books")
+        cursor.execute("""
+            SELECT b.id, b.nameBook, b.yearBook, b.availableBook, 
+            c.nameCategory as category_name, 
+            a.nameAuthor || ' ' || a.surnameAuthor as author_name
+            FROM Books b
+            JOIN Categories c ON b.category_id = c.id
+            JOIN Authors a ON b.author_id = a.id
+            ORDER BY b.id;
+            """)
         books = cursor.fetchall()
         columns = [desc[0] for desc in cursor.description]
-        books_dict = dict(zip(columns, books))
+        books_list = []
+        for row in books:
+            book_dict = dict(zip(columns, row))
+            books_list.append(book_dict)
+
         if not user["is_admin"]:
             cursor.execute("""
                 SELECT books_id
@@ -166,7 +181,7 @@ def render_book_list(email: str, password: str):
 
     # Render the book list page with appropriate data
     output = book_list_page.render(
-        books=books_dict,
+        books=books_list,
         username=email,
         rents_book_id=rents_book_id
     )
@@ -187,8 +202,7 @@ def book_page(book_id):
         return JSONResponse(status_code=404, content={"message": "Книжка не знайдена"})
     
     book_dict = dict(zip(columns, book))
-    inserted_book_json = json.dumps(book_dict)
-    return inserted_book_json
+    return book_dict
 
 
 @app.post("/book", summary="Post method for Book")
@@ -290,7 +304,7 @@ def rent_book(
             WHERE user_id = %s
             AND isReturned = FALSE
             AND books_id = %s
-        """, (user.id, book_id))
+        """, (user['id'], book_id))
         rent = cursor.fetchone()
 
         if rent:  # Rental record already exists
@@ -298,7 +312,7 @@ def rent_book(
                 UPDATE Histories
                 SET isReturned = TRUE, dateReturn = %s
                 WHERE id = %s
-            """, (date_now, rent["id"]))
+            """, (date_now, rent[0]))
             cursor.execute("""
                 UPDATE Books
                 SET availableBook = availableBook + 1
@@ -309,7 +323,7 @@ def rent_book(
                 cursor.execute("""
                     INSERT INTO Histories (user_id, books_id, dateLoan, isReturned)
                     VALUES (%s, %s, %s, FALSE)
-                """, (user.id, book_id, date_now))
+                """, (user['id'], book_id, date_now))
                 cursor.execute("""
                     UPDATE Books
                     SET availableBook = availableBook - 1
@@ -338,16 +352,20 @@ def render_rent_list(user):
         book_list_page = env.get_template('rent-list.html')
         with connection_pstgr() as (conn, cursor):
             cursor.execute("""
-                SELECT * FROM History
+                SELECT * FROM Histories
                 ORDER BY isReturned ASC, dateLoan DESC
             """)
             rents = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
-            rents_dict = dict(zip(columns, rents))
-        output = book_list_page.render(
-        rents = rents_dict,
-        username=user['emailUser']
-    )
+            rents_list = []
+            for row in rents:
+                rent_dict = dict(zip(columns, row))
+                rents_list.append(rent_dict)
+
+            output = book_list_page.render(
+                rents=rents_list,
+                username=user['emailuser']
+            )
     else:
        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization failed")
     return output

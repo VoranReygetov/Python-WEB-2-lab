@@ -44,14 +44,14 @@
     <tbody>
         {% for book in books %}
             <tr>
-                <td>{{ book.id }}</td>
-                <td>{{ book.nameBook }}</td>
-                <td>{{ book.yearBook }}</td>
-                <td>{{ book.availableBook }}</td>
-                <td>{{ book.categories.nameCategory }}</td>
-                <td>{{ book.author.nameAuthor }}</td>
-                <td><button onclick="getBook({{ book.id }})" class="btn btn-secondary">Edit</button></td> 
-                <td><button onclick="deleteBook({{ book.id }})" class="btn btn-danger">Delete</button></td>          
+                <td>{{ book["id"] }}</td>
+                <td>{{ book['namebook']}}</td>
+                <td>{{ book['yearbook']}}</td>
+                <td>{{ book['availablebook'] }}</td>
+                <td>{{ book["category_name"] }}</td>
+                <td>{{ book["author_name"]}}</td>
+                <td><button onclick="getBook({{ book["id"] }})" class="btn btn-secondary">Edit</button></td> 
+                <td><button onclick="deleteBook({{ book["id"] }})" class="btn btn-danger">Delete</button></td>          
             </tr>
         {% endfor %}
     </tbody>
@@ -66,9 +66,9 @@
         if (response.ok === true) {
         const book = await response.json();
         document.getElementById("bookId").value = book.id;
-        document.getElementById("bookYear").value = book.yearBook;
-        document.getElementById("bookName").value = book.nameBook;
-        document.getElementById("bookQuantity").value = book.availableBook;
+        document.getElementById("bookYear").value = book.yearbook;
+        document.getElementById("bookName").value = book.namebook;
+        document.getElementById("bookQuantity").value = book.availablebook;
         document.getElementById("bookCategory").value = book.category_id;
         document.getElementById("bookAuthor").value = book.author_id;
         }

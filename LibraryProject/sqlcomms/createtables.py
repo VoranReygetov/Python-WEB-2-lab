@@ -64,8 +64,8 @@ cur.execute('''
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES Users(id) NOT NULL,
         books_id INTEGER REFERENCES Books(id) NOT NULL,
-        dateLoan TIMESTAMP NOT NULL,
-        dateReturn TIMESTAMP,
+        dateLoan TIMESTAMP(0) NOT NULL,
+        dateReturn TIMESTAMP(0),
         isReturned BOOLEAN DEFAULT FALSE
     )
 ''')
