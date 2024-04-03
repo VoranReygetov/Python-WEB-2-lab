@@ -31,7 +31,7 @@ def connection_pstgr():
         cursor.close()
         conn.close()
 
-app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reloadr
+app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reload
 
 def custom_openapi():
     if app.openapi_schema:
@@ -67,8 +67,7 @@ def authenticate_user(email: str, password: str):
         if searched_user and searched_user[3] == password:
             columns = [desc[0] for desc in cursor.description]
             user_dict = dict(zip(columns, searched_user))
-            inserted_user_json = json.dumps(user_dict)
-            return inserted_user_json
+            return user_dict
         else:
             return None
 
@@ -91,7 +90,7 @@ def login(data = Body()):
     email = data.get("emailUser")
     password = data.get("passwordUser")
     with connection_pstgr() as (conn, cursor):
-        cursor.execute("SELECT * FROM Users WHERE emailUser = %s", (email))
+        cursor.execute("SELECT * FROM Users WHERE emailUser = %s", (email,))
         searched_user = cursor.fetchone()
     try:
         if searched_user[3] == password:
@@ -154,18 +153,20 @@ def render_book_list(email: str, password: str):
     with connection_pstgr() as (conn, cursor):
         cursor.execute("SELECT * FROM Books")
         books = cursor.fetchall()
-        if not user.is_admin:
+        columns = [desc[0] for desc in cursor.description]
+        books_dict = dict(zip(columns, books))
+        if not user["is_admin"]:
             cursor.execute("""
                 SELECT books_id
                 FROM Histories
                 WHERE user_id = %s AND isReturned = FALSE
-            """, (user.id,))
+            """, (user["id"],))
             # Fetch all rows from the result set
             rents_book_id = [row[0] for row in cursor.fetchall()]
 
     # Render the book list page with appropriate data
     output = book_list_page.render(
-        books=books,
+        books=books_dict,
         username=email,
         rents_book_id=rents_book_id
     )
