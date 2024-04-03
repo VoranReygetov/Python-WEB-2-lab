@@ -1,16 +1,31 @@
-from sqlalchemy.orm import sessionmaker, Session, joinedload
-from models import *
 from fastapi import Depends, FastAPI, Body, HTTPException, status, Response, Cookie
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel
 from fastapi.openapi.utils import get_openapi
+import psycopg2
+from contextlib import contextmanager
+#connection to postgreSQL
 
-file_loader = FileSystemLoader('templates')
-env = Environment(loader=file_loader)
+@contextmanager
+def connection_pstgr():
+    """
+    Context manager for establishing a connection to the PostgreSQL database.
+    """
+    conn = psycopg2.connect(
+        dbname="libraryproject",
+        host="127.0.0.1",
+        user="postgres",
+        password="password",
+        port="5432"
+    )
+    cursor = conn.cursor()
+    try:
+        yield conn, cursor
+    finally:
+        cursor.close()
+        conn.close()
 
-Base.metadata.create_all(bind=engine)
-app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reload
+app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reloadr
 
 def custom_openapi():
     if app.openapi_schema:
@@ -29,37 +44,48 @@ def custom_openapi():
     return app.openapi_schema
 app.openapi = custom_openapi
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 @app.get("/", summary="Redirect to login page")
 def main():
+    """
+    Redirect form empty page.
+    """
     return RedirectResponse("/login")
 
-def authenticate_user(db: Session, email: str, password: str):
-    searched_user = db.query(User).filter_by(emailUser=email).first()
-    if searched_user and searched_user.check_password(password):
-        return searched_user
-    return None
+def authenticate_user(email: str, password: str):
+    """
+    Checking in Users table by passed emails to LogIn form.
+    """
+    with connection_pstgr() as (conn, cursor):
+        cursor.execute("SELECT * FROM Users WHERE emailUser = %s", (email,))
+        searched_user = cursor.fetchone()
+        if searched_user and searched_user['passwordUser'] == password:
+            return searched_user
+        else:
+            return None
 
 @app.get("/login", summary="Login page")
-def login_get(email: str| None = Cookie(default=None), password: str | None = Cookie(default=None), db: Session = Depends(get_db)):
-    user = authenticate_user(db, email, password)
+def login_get(email: str | None = Cookie(default=None), password: str | None = Cookie(default=None)):
+    """
+    Retrieves the login page.
+    """
+    user = authenticate_user(email, password)
     if user:
         return RedirectResponse("/book-list")
     return FileResponse("templates/login.html")
+
     
 @app.post("/login", summary="Post method for LogIn")
-def login(data = Body(), db: Session = Depends(get_db)):
+def login(data = Body()):
+    """
+    Handles the login request.
+    """
     email = data.get("emailUser")
     password = data.get("passwordUser")
-    searched_user = db.query(User).filter_by(emailUser=email).first()
+    with connection_pstgr() as (conn, cursor):
+        cursor.execute("SELECT * FROM Users WHERE emailUser = %s", (email))
+        searched_user = cursor.fetchone()
     try:
-        if searched_user.check_password(password):
+        if searched_user.get("passwordUser") == password:
             response = JSONResponse(content={"message": f"{searched_user}"})
             response.set_cookie(key="email", value=data.get("emailUser"))
             response.set_cookie(key="password", value=data.get("passwordUser"))
@@ -74,7 +100,7 @@ def register_page():
     return FileResponse("templates/registration.html")
 
 @app.post("/registration", summary="Post method for Registration")
-def create_user(data = Body(), db: Session = Depends(get_db)):
+def create_user(data = Body()):
     user = User(nameUser=data["nameUser"], surnameUser=data["surnameUser"],
                   passwordUser=data["passwordUser"],emailUser=data["emailUser"],numberUser=data["numberUser"])
     try:
